@@ -53,18 +53,6 @@ class Matrix {
                 for (int k=0; k < n_cols; ++k){
                     seal::BigPolyArray product = evaluator.multiply(values[i][k], other.values[k][j]);
                     seal::BigPolyArray new_value = evaluator.add(product, result[i][j]);
-                    
-                    seal::BigPoly mul1_enc = decryptor.decrypt(values[i][k]);
-                    double mul1 = encoder.decode(mul1_enc);
-                    seal::BigPoly mul2_enc = decryptor.decrypt(other.values[k][j]);
-                    double mul2 = encoder.decode(mul2_enc);
-                    seal::BigPoly prod_enc = decryptor.decrypt(product);
-                    double prod = encoder.decode(prod_enc);
-                    seal::BigPoly prev_enc = decryptor.decrypt(result[i][j]);
-                    double prev = encoder.decode(prev_enc);
-                    seal::BigPoly new_val_enc = decryptor.decrypt(new_value);
-                    double new_val = encoder.decode(new_val_enc);
-                    
                     result[i][j] = new_value;
                 }
             }
@@ -113,6 +101,44 @@ class Matrix {
             result[1][1] = values[0][0];
             return Matrix(result);
         }
+        else if (n_cols == 3 && n_rows == 3){
+            std::vector< std::vector<BigPolyArray>> m_0_0_values = {{values[1][1], values[1][2]}, {values[2][1], values[2][2]}};
+            Matrix m_0_0 =Matrix(m_0_0_values);
+            std::vector< std::vector<BigPolyArray>> m_0_1_values = {{values[0][1], values[0][2]}, {values[2][1], values[2][2]}};
+            Matrix m_0_1 =Matrix(m_0_1_values);
+            std::vector< std::vector<BigPolyArray>> m_0_2_values = {{values[0][1], values[0][2]}, {values[1][1], values[1][2]}};
+            Matrix m_0_2 =Matrix(m_0_2_values);
+            BigPolyArray a_0_0 = m_0_0.get_determinant(encoder, decryptor, encryptor, evaluator);
+            BigPolyArray a_0_1 = evaluator.negate(m_0_1.get_determinant(encoder, decryptor, encryptor, evaluator));
+            BigPolyArray a_0_2 = m_0_2.get_determinant(encoder, decryptor, encryptor, evaluator);
+
+
+            std::vector< std::vector<BigPolyArray>> m_1_0_values = {{values[1][0], values[1][2]}, {values[2][0], values[2][2]}};
+            Matrix m_1_0 =Matrix(m_1_0_values);
+            std::vector< std::vector<BigPolyArray>> m_1_1_values = {{values[0][0], values[0][2]}, {values[2][0], values[2][2]}};
+            Matrix m_1_1 =Matrix(m_1_1_values);
+            std::vector< std::vector<BigPolyArray>> m_1_2_values = {{values[0][0], values[0][2]}, {values[1][0], values[1][2]}};
+            Matrix m_1_2 =Matrix(m_1_2_values);
+
+            BigPolyArray a_1_0 = evaluator.negate(m_1_0.get_determinant(encoder, decryptor, encryptor, evaluator));
+            BigPolyArray a_1_1 = m_1_1.get_determinant(encoder, decryptor, encryptor, evaluator);
+            BigPolyArray a_1_2 = evaluator.negate(m_1_2.get_determinant(encoder, decryptor, encryptor, evaluator));
+
+            std::vector< std::vector<BigPolyArray>> m_2_0_values = {{values[1][0], values[1][1]}, {values[2][0], values[2][1]}};
+            Matrix m_2_0 =Matrix(m_2_0_values);
+            std::vector< std::vector<BigPolyArray>> m_2_1_values = {{values[0][0], values[0][1]}, {values[2][0], values[2][1]}};
+            Matrix m_2_1 =Matrix(m_2_1_values);
+            std::vector< std::vector<BigPolyArray>> m_2_2_values = {{values[0][0], values[0][1]}, {values[1][0], values[1][1]}};
+            Matrix m_2_2 =Matrix(m_2_2_values);
+
+            BigPolyArray a_2_0 = m_2_0.get_determinant(encoder, decryptor, encryptor, evaluator);
+            BigPolyArray a_2_1 = evaluator.negate(m_2_1.get_determinant(encoder, decryptor, encryptor, evaluator));
+            BigPolyArray a_2_2 = m_2_2.get_determinant(encoder, decryptor, encryptor, evaluator);
+            
+            std::vector< std::vector<BigPolyArray>> result = {{a_0_0, a_0_1, a_0_2}, {a_1_0, a_1_1, a_1_2}, {a_2_0, a_2_1, a_2_2}};
+
+            return Matrix(result);
+        }
         else{
             cout <<"Cannot determine adjugate matrix, outputting copy of input matrix..." <<endl;
             return Matrix(values);
@@ -145,6 +171,35 @@ class Matrix {
             BigPolyArray det = evaluator.sub(ac, bd);
             return det;
         }
+        else if (n_cols == 3 && n_rows == 3){
+            cout << "calculating determinat of a 3x3 matrix" <<endl;
+            BigPolyArray a = values[0][0];
+            BigPolyArray b = values[0][1];
+            BigPolyArray c = values[0][2];
+            BigPolyArray d = values[1][0];
+            BigPolyArray e = values[1][1];
+            BigPolyArray f = values[1][2];
+            BigPolyArray g = values[2][0];
+            BigPolyArray h = values[2][1];
+            BigPolyArray i = values[2][2];
+            std::vector<BigPolyArray> aei_vec = {a, e, i};
+            std::vector<BigPolyArray> bfg_vec = {b, f, g};
+            std::vector<BigPolyArray> cdh_vec = {c, d, h};
+            std::vector<BigPolyArray> ceg_vec = {c, e, g};
+            std::vector<BigPolyArray> bdi_vec = {b, d, i};
+            std::vector<BigPolyArray> afh_vec = {a, f, h};
+            BigPolyArray aei = evaluator.multiply_many(aei_vec);
+            BigPolyArray bfg = evaluator.multiply_many(bfg_vec);
+            BigPolyArray cdh = evaluator.multiply_many(cdh_vec);
+            BigPolyArray ceg = evaluator.negate(evaluator.multiply_many(ceg_vec));
+            BigPolyArray bdi = evaluator.negate(evaluator.multiply_many(bdi_vec));
+            BigPolyArray afh = evaluator.negate(evaluator.multiply_many(afh_vec));
+
+            std::vector<BigPolyArray> det_to_sum = {aei, bfg, cdh, ceg, bdi, afh};
+            BigPolyArray det = evaluator.add_many(det_to_sum);
+            return det;
+        }
+
         else{
             cout << "cannot properly output determinat... outputting m[0][0]..." <<endl;
             return values[0][0];
@@ -197,7 +252,7 @@ int main()
     return 0;
 }
 
-Matrix read_data_file(string & file_name, seal::FractionalEncoder & encoder, seal::Decryptor & decryptor, seal::Encryptor & encryptor, seal::Evaluator & evaluator, bool is_vector){
+Matrix read_data_file(string & file_name, seal::FractionalEncoder & encoder, seal::Decryptor & decryptor, seal::Encryptor & encryptor, seal::Evaluator & evaluator, int dimension){
     cout << "About to get file data " << file_name << "..." <<endl;
     string line;
     ifstream myfile (file_name);
@@ -205,7 +260,9 @@ Matrix read_data_file(string & file_name, seal::FractionalEncoder & encoder, sea
     if (myfile.is_open())
     {
         while ( getline (myfile,line) ){
+            int start = 0;
             int first_tab = line.find("\t");
+            int next_tab = first_tab;
             int end = line.find("\n");
             if (end == -1){
                 end = line.length();
@@ -213,13 +270,32 @@ Matrix read_data_file(string & file_name, seal::FractionalEncoder & encoder, sea
             vector<BigPolyArray> row_data;
             //int last_tab = line.find("\t", first_tab+2);
 
-            if (is_vector){
+            if (dimension == 1){
                 double i_0= atof(line.c_str()); 
                 BigPoly encoded_i_0 = encoder.encode(i_0);
                 row_data.emplace_back(encryptor.encrypt(encoded_i_0));
                 matrix_data.emplace_back(row_data);
             }
             else{
+                //cout << line << endl;
+                while (start != line.length()){
+                    if (next_tab == -1){
+                        next_tab = line.length();
+                    }
+                    //cout << start << endl;
+                    //cout << next_tab << endl;
+                    string i_str = line.substr(start, next_tab);
+                    double i = atof(i_str.c_str());
+                    BigPoly encoded_i = encoder.encode(i);
+                    BigPolyArray final_i = encryptor.encrypt(encoded_i);
+                    //cout << "size: " << final_i.size() << endl;
+                    row_data.emplace_back(final_i);
+                    start = next_tab;
+                    next_tab = line.find("\t", start+1);
+                }
+                matrix_data.emplace_back(row_data);
+            }
+            /*
                 string i_0_str = line.substr(0,first_tab);
                 double i_0= atof(i_0_str.c_str());
                 string i_1_str = line.substr(first_tab,end);
@@ -230,6 +306,7 @@ Matrix read_data_file(string & file_name, seal::FractionalEncoder & encoder, sea
                 row_data.emplace_back(encryptor.encrypt(encoded_i_1));
                 matrix_data.emplace_back(row_data);
             }
+            */
             //c = atoi(b.c_str());
             //cout << line << '\n';
         }
@@ -248,21 +325,25 @@ void example_lr()
     // Create encryption parameters
     EncryptionParameters parms;
 
-    parms.poly_modulus() = "1x^2048 + 1";
+    parms.poly_modulus() = "1x^4096 + 1";
     //increased from 1024
     //was 2048 through mul
-    parms.coeff_modulus() = ChooserEvaluator::default_parameter_options().at(2048);
+    parms.coeff_modulus() = ChooserEvaluator::default_parameter_options().at(4096);
     //decreased from 8
     // was 5 for just though mul
-    parms.plain_modulus() = 1 << 7;
+    parms.plain_modulus() = 1 << 5;
+
+
+    parms.decomposition_bit_count() = 20;
 
     // Generate keys.
     cout << "Generating keys ..." << endl;
     KeyGenerator generator(parms);
-    generator.generate();
+    generator.generate(10);
     cout << "... key generation complete" << endl <<endl;
     BigPolyArray public_key = generator.public_key();
     BigPoly secret_key = generator.secret_key();
+    EvaluationKeys evaluation_keys = generator.evaluation_keys();
     /*
     We will need a fractional encoder for dealing with the rational numbers. Here we reserve 
     64 coefficients of the polynomial for the integral part (low-degree terms) and expand the 
@@ -272,18 +353,27 @@ void example_lr()
 
     // Create the rest of the tools
     Encryptor encryptor(parms, public_key);
-    Evaluator evaluator(parms);
+    Evaluator evaluator(parms, evaluation_keys);
     Decryptor decryptor(parms, secret_key);
 
-    string file_name_data  = "data.txt";
-    string file_name_labels = "labels.txt";
+    string file_name_data  = "../data.txt";
+    string file_name_labels = "../labels.txt";
     Matrix X = read_data_file(file_name_data, encoder, decryptor, encryptor, evaluator, false);
     Matrix y = read_data_file(file_name_labels, encoder, decryptor, encryptor, evaluator, true);
     cout << "Encrypted data matrix and label vector have been created." << endl;
     cout << "Preparing to do linear regression..." << endl <<endl <<endl;
     cout << "Computing (X^T * X)^(-1) * X^(T)y..." << endl;
-    //Model= (X^T * X)^(-1) * X^(T)y
 
+    //Matrix m = X.get_adjugate(encoder, decryptor, encryptor, evaluator);
+    //m.print_decrypted(encoder, decryptor, encryptor, evaluator);
+    /*
+    cout << "determinant:" << endl;
+    BigPoly plain_det = decryptor.decrypt(det);
+    double decoded_det = encoder.decode(plain_det);
+    cout << decoded_det << endl;
+    */
+
+    //Model= (X^T * X)^(-1) * X^(T)y
 
     //Part 1 X^(T)y
     cout << "Computing X^(T)y" <<endl;

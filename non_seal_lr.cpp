@@ -89,6 +89,44 @@ class Matrix {
             result[1][1] = values[0][0];
             return Matrix(result);
         }
+        else if (n_cols == 3 && n_rows == 3){
+            std::vector< std::vector<double>> m_0_0_values = {{values[1][1], values[1][2]}, {values[2][1], values[2][2]}};
+            Matrix m_0_0 =Matrix(m_0_0_values);
+            std::vector< std::vector<double>> m_0_1_values = {{values[0][1], values[0][2]}, {values[2][1], values[2][2]}};
+            Matrix m_0_1 =Matrix(m_0_1_values);
+            std::vector< std::vector<double>> m_0_2_values = {{values[0][1], values[0][2]}, {values[1][1], values[1][2]}};
+            Matrix m_0_2 =Matrix(m_0_2_values);
+            double a_0_0 = m_0_0.get_determinant();
+            double a_0_1 = -1 * m_0_1.get_determinant();
+            double a_0_2 = m_0_2.get_determinant();
+
+
+            std::vector< std::vector<double>> m_1_0_values = {{values[1][0], values[1][2]}, {values[2][0], values[2][2]}};
+            Matrix m_1_0 =Matrix(m_1_0_values);
+            std::vector< std::vector<double>> m_1_1_values = {{values[0][0], values[0][2]}, {values[2][0], values[2][2]}};
+            Matrix m_1_1 =Matrix(m_1_1_values);
+            std::vector< std::vector<double>> m_1_2_values = {{values[0][0], values[0][2]}, {values[1][0], values[1][2]}};
+            Matrix m_1_2 =Matrix(m_1_2_values);
+
+            double a_1_0 = -1*m_1_0.get_determinant();
+            double a_1_1 = m_1_1.get_determinant();
+            double a_1_2 = -1*m_1_2.get_determinant();
+
+            std::vector< std::vector<double>> m_2_0_values = {{values[1][0], values[1][1]}, {values[2][0], values[2][1]}};
+            Matrix m_2_0 =Matrix(m_2_0_values);
+            std::vector< std::vector<double>> m_2_1_values = {{values[0][0], values[0][1]}, {values[2][0], values[2][1]}};
+            Matrix m_2_1 =Matrix(m_2_1_values);
+            std::vector< std::vector<double>> m_2_2_values = {{values[0][0], values[0][1]}, {values[1][0], values[1][1]}};
+            Matrix m_2_2 =Matrix(m_2_2_values);
+
+            double a_2_0 = m_2_0.get_determinant();
+            double a_2_1 = -1*m_2_1.get_determinant();
+            double a_2_2 = m_2_2.get_determinant();
+            
+            std::vector< std::vector<double>> result = {{a_0_0, a_0_1, a_0_2}, {a_1_0, a_1_1, a_1_2}, {a_2_0, a_2_1, a_2_2}};
+
+            return Matrix(result);
+        }
         else{
             cout <<"Cannot determine adjugate matrix, outputting copy of input matrix..." <<endl;
             return Matrix(values);
@@ -116,9 +154,35 @@ class Matrix {
             double det = ac- bd;
             return det;
         }
+        else if (n_cols == 3 && n_rows == 3){
+            cout << "calculating determinat of a 3x3 matrix" <<endl;
+            double a = values[0][0];
+            double b = values[0][1];
+            double c = values[0][2];
+            double d = values[1][0];
+            double e = values[1][1];
+            double f = values[1][2];
+            double g = values[2][0];
+            double h = values[2][1];
+            double i = values[2][2];
+            std::vector<double> aei_vec = {a, e, i};
+            std::vector<double> bfg_vec = {b, f, g};
+            std::vector<double> cdh_vec = {c, d, h};
+            std::vector<double> ceg_vec = {c, e, g};
+            std::vector<double> bdi_vec = {b, d, i};
+            std::vector<double> afh_vec = {a, f, h};
+            double aei = a * e * i;
+            double bfg = b*f*g;
+            double cdh = c*d*h;
+            double ceg = -1*c*e*g;
+            double bdi = -1*b*d*i;
+            double afh = -1* a*f*h;
+            double det = aei+ bfg+ cdh+ ceg+ bdi+ afh;
+            return det;
+        }
         else{
-            cout << "cannot properly output determinat... outputting m[0][0]..." <<endl;
-            return values[0][0];
+            cout <<"Cannot determine adjugate matrix, outputting copy of input matrix..." <<endl;
+            return 0.0;
         }
     }
 
@@ -175,7 +239,10 @@ Matrix read_data_file(string & file_name, bool is_vector){
     if (myfile.is_open())
     {
         while ( getline (myfile,line) ){
+            cout <<"reading" <<endl;
+            int start = 0; 
             int first_tab = line.find("\t");
+            int next_tab = first_tab;
             int end = line.find("\n");
             if (end == -1){
                 end = line.length();
@@ -189,12 +256,19 @@ Matrix read_data_file(string & file_name, bool is_vector){
                 matrix_data.emplace_back(row_data);
             }
             else{
-                string i_0_str = line.substr(0,first_tab);
-                double i_0= atof(i_0_str.c_str());
-                string i_1_str = line.substr(first_tab,end);
-                double i_1 = atof(i_1_str.c_str());
-                row_data.emplace_back(i_0);
-                row_data.emplace_back(i_1);
+                while (start != line.length()){
+                    if (next_tab == -1){
+                        next_tab = line.length();
+                    }
+                    //cout << start << endl;
+                    //cout << next_tab << endl;
+                    string i_str = line.substr(start, next_tab);
+                    double i = atof(i_str.c_str());
+                    //cout << "size: " << final_i.size() << endl;
+                    row_data.emplace_back(i);
+                    start = next_tab;
+                    next_tab = line.find("\t", start+1);
+                }
                 matrix_data.emplace_back(row_data);
             }
             //c = atoi(b.c_str());
@@ -212,7 +286,7 @@ void example_lr()
 {
     print_example_banner("Linear Regression");
 
-    string file_name_data  = "../sealcryto/data.txt";
+    string file_name_data  = "../sealcrypto/data.txt";
     string file_name_labels = "../sealcrypto/labels.txt";
     Matrix X = read_data_file(file_name_data, false);
     Matrix y = read_data_file(file_name_labels, true);
@@ -224,6 +298,13 @@ void example_lr()
 
     //Part 1 X^(T)y
     cout << "Computing X^(T)y" <<endl;
+    /*
+    double det = X.get_determinant();
+    cout << "determinant: " << det <<endl;
+    Matrix m = X.get_adjugate();
+    m.print_decrypted();
+    */
+    
     Matrix X_T = X.get_transpose();
     Matrix X_T_y = X_T.multiply(y);
     cout << "Done..." << endl <<endl <<endl;
@@ -255,6 +336,7 @@ void example_lr()
 
     cout << "1/determinant multiple: " << endl;
     cout << det << endl;
+    
 }
 
 void print_example_banner(string title)
