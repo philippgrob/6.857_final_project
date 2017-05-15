@@ -7,6 +7,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <cmath> 
 
 using namespace std;
 using namespace seal;
@@ -23,7 +24,7 @@ void example_relinearization_part1();
 void example_relinearization_part2();
 void example_timing();
 void example_lr();
-
+//void do_lr(Matrix & X, Matrix & y, seal::FractionalEncoder & encoder, seal::Decryptor & decryptor, seal::Encryptor & encryptor, seal::Evaluator & evaluator, EncryptionParameters & parms);
 
 class Matrix {
    public:
@@ -41,12 +42,12 @@ class Matrix {
          }
          return Matrix(result);
       }
-        
-      Matrix multiply(Matrix & other, seal::FractionalEncoder & encoder, seal::Decryptor & decryptor, seal::Encryptor & encryptor, seal::Evaluator & evaluator) {
+      /* 
+      Matrix multiply_old(Matrix & other, seal::FractionalEncoder & encoder, seal::Decryptor & decryptor, seal::Encryptor & encryptor, seal::Evaluator & evaluator) {
          cout << "Multiplying 2 matricies together..."  <<endl;
          int rows = n_rows; 
          int cols = other.n_cols;
-         std::vector< std::vector<seal::BigPolyArray> > result = initialize_empty(rows, cols, encoder, decryptor, encryptor);
+         std::vector< std::vector<seal::BigPolyArray> > result = initialize_zero(rows, cols, encoder, decryptor, encryptor);
          for (int i = 0; i < n_rows; ++i)
          {
             for (int j= 0; j < other.n_cols; ++j){
@@ -56,6 +57,33 @@ class Matrix {
                     result[i][j] = new_value;
                 }
             }
+         }
+         return Matrix(result);
+      }
+      */
+      Matrix multiply(Matrix & other, seal::FractionalEncoder & encoder, seal::Decryptor & decryptor, seal::Encryptor & encryptor, seal::Evaluator & evaluator) {
+         cout << "Multiplying 2 matricies together..."  <<endl;
+         int rows = n_rows; 
+         int cols = other.n_cols;
+         std::vector< std::vector< std::vector<seal::BigPolyArray> > > to_sum = initialize_empty(rows, cols, encoder, decryptor, encryptor);
+         for (int i = 0; i < n_rows; ++i)
+         {
+            for (int j= 0; j < other.n_cols; ++j){
+                for (int k=0; k < n_cols; ++k){
+                    seal::BigPolyArray product = evaluator.multiply(values[i][k], other.values[k][j]);
+                    to_sum[i][j].emplace_back(product);
+                }
+            }
+         }
+        std::vector< std::vector<seal::BigPolyArray> > result;
+        for (int i = 0; i < n_rows; ++i)
+         {
+            std::vector<seal::BigPolyArray> row_result;
+            for (int j= 0; j < other.n_cols; ++j){
+              BigPolyArray sum = evaluator.add_many(to_sum[i][j]);
+              row_result.emplace_back(sum);
+            }
+            result.emplace_back(row_result);
          }
          return Matrix(result);
       }
@@ -92,8 +120,16 @@ class Matrix {
 
       Matrix get_adjugate(seal::FractionalEncoder & encoder, seal::Decryptor & decryptor, seal::Encryptor & encryptor, seal::Evaluator & evaluator){
         cout << "Calculating the adjugate of a matrix..." <<endl;
+        if (n_cols == 1 && n_rows == 1){
+          std::vector< std::vector<seal::BigPolyArray> > result;
+          double ONE = 1;
+          BigPoly encoded_number = encoder.encode(ONE);
+          std::vector<seal::BigPolyArray> row = {encryptor.encrypt(encoded_number)};
+          result.emplace_back(row);
+          return Matrix(result);
+        }
         if (n_cols == 2 && n_rows == 2){
-            std::vector< std::vector<seal::BigPolyArray> > result = initialize_empty(2, 2, encoder, decryptor, encryptor);
+            std::vector< std::vector<seal::BigPolyArray> > result = initialize_zero(2, 2, encoder, decryptor, encryptor);
             //for 2x2 matrix [[a,b],[c,d]] adjugate is [[d, -b],[-c, a]]
             result[0][0] = values[1][1];
             result[0][1] = evaluator.negate(values[0][1]);
@@ -140,27 +176,49 @@ class Matrix {
             return Matrix(result);
         }
         else{
-            cout <<"Cannot determine adjugate matrix, outputting copy of input matrix..." <<endl;
-            return Matrix(values);
+            return get_adjugate_recursive(encoder, decryptor, encryptor, evaluator);
         }
 
       }
 
-      void print_decrypted(seal::FractionalEncoder & encoder, seal::Decryptor & decryptor, seal::Encryptor & encryptor, seal::Evaluator & evaluator){
-         cout << "Printing matrix..." <<endl;
-         for (int i = 0; i < n_rows; ++i)
-         {
-            for (int j= 0; j < n_cols; ++j){
-               seal::BigPoly plain_result = decryptor.decrypt(values[i][j]);
-               double result = encoder.decode(plain_result);
-               cout << result;
-               cout << "\t";
+      Matrix get_adjugate_recursive(seal::FractionalEncoder & encoder, seal::Decryptor & decryptor, seal::Encryptor & encryptor, seal::Evaluator & evaluator){
+        cout << "Calculating the adjugate of a matrix..." <<endl;
+        std::vector< std::vector<seal::BigPolyArray> > result;
+        for(int i=0; i < n_rows; ++i){
+          std::vector<seal::BigPolyArray> row_result;
+          for(int j=0; j < n_cols; ++j){
+            Matrix m = wo_row_col(i, j);
+            int sign = std::pow(-1,i+j);
+            BigPolyArray det = m.get_determinant(encoder, decryptor, encryptor, evaluator);
+            BigPolyArray value = evaluator.multiply_plain(det, encoder.encode(sign));
+            row_result.emplace_back(value);
+          }
+          result.emplace_back(row_result);
+        }
+        Matrix adj_T = Matrix(result);
+        return adj_T.get_transpose();
+      }
+
+      Matrix wo_row_col(int row, int col){
+        std::vector< std::vector<seal::BigPolyArray> > result;
+        for(int i=0; i < n_rows; ++i){
+          if(i != row){
+            std::vector<seal::BigPolyArray> row_result;
+            for(int j=0; j < n_cols; ++j){
+              if(j != col){
+                row_result.emplace_back(values[i][j]);
+              }
             }
-            cout << endl;
-         }
+            result.emplace_back(row_result);
+          }
+        }
+        return Matrix(result);
       }
  
-    BigPolyArray get_determinant(seal::FractionalEncoder & encoder, seal::Decryptor & decryptor, seal::Encryptor & encryptor, seal::Evaluator & evaluator){
+      BigPolyArray get_determinant(seal::FractionalEncoder & encoder, seal::Decryptor & decryptor, seal::Encryptor & encryptor, seal::Evaluator & evaluator){
+        if (n_cols == 1 && n_rows == 1){
+          return values[0][0];
+        }
         if (n_cols == 2 && n_rows == 2){
             cout << "calculating determinat of a 2x2 matrix" <<endl;
             BigPolyArray ac = evaluator.multiply(values[0][0], values[1][1]);
@@ -201,11 +259,78 @@ class Matrix {
         }
 
         else{
-            cout << "cannot properly output determinat... outputting m[0][0]..." <<endl;
-            return values[0][0];
+            cout << "calling recursive determinant function" << endl;
+            return get_determinant_recursive(encoder, decryptor, encryptor, evaluator);
         }
-    }
+      }
+      BigPolyArray get_determinant_recursive(seal::FractionalEncoder & encoder, seal::Decryptor & decryptor, seal::Encryptor & encryptor, seal::Evaluator & evaluator){
+        if(n_cols != n_rows){
+          cout << "NOT A SQUARE MATRIX NO DETERMINANT";
+          cout << n_cols << "\t" << n_rows << endl;
+        }
+        std::vector< std::vector<seal::BigPolyArray> > products;
+        int i=1;
+        for(int j=0; j < n_cols; ++j){
+          cout << "inside loop" << endl;
+          Matrix m = wo_row_col(i, j);
+          cout << "created matrix without row/col" << endl;
+          BigPoly sign = encoder.encode(std::pow(-1,i+j));
+          BigPolyArray sign_encrypt = encryptor.encrypt(sign);
+          cout << "right before recursive call" << endl;
+          BigPolyArray det = m.get_determinant(encoder, decryptor, encryptor, evaluator);
+          cout << "finished recursive call" << endl;
+          std::vector<seal::BigPolyArray> to_mul = {values[i][j], det, sign_encrypt};
+          cout << "finished vector" << endl;
+          products.emplace_back(to_mul);
+          cout << "end of for loop" << endl;
+        }
+        std::vector<seal::BigPolyArray> to_sum;
+        for(int i=0; i<n_rows; ++i){
+          BigPolyArray product = evaluator.multiply_many(products[i]);
+          cout << "after mult many" << endl;
+          to_sum.emplace_back(product);
+        }
+        BigPolyArray result = evaluator.add_many(to_sum);
+        return result;
+        //Matrix adj_T = Matrix(result);
+        //return adj_T.get_transpose();
+      }
+      double get_average_noise(seal::FractionalEncoder & encoder, seal::Decryptor & decryptor, seal::Encryptor & encryptor, seal::Evaluator & evaluator){
+        double sum = 0;
+        for(int row =0; row< n_rows; ++row){
+          for(int col=0; col<n_cols; ++col){
+            sum += decryptor.inherent_noise_bits(values[row][col]);
+          }
+        }
+        double avg_noise = sum/(n_rows*n_cols);
+        return avg_noise;
+      }
 
+      double get_max_noise(seal::FractionalEncoder & encoder, seal::Decryptor & decryptor, seal::Encryptor & encryptor, seal::Evaluator & evaluator){
+        double max = 0;
+        for(int row =0; row< n_rows; ++row){
+          for(int col=0; col<n_cols; ++col){
+            double noise = decryptor.inherent_noise_bits(values[row][col]);
+            if (noise > max){
+              max = noise;
+            }
+          }
+        }
+        return max;
+      }
+      void print_decrypted(seal::FractionalEncoder & encoder, seal::Decryptor & decryptor, seal::Encryptor & encryptor, seal::Evaluator & evaluator){
+         cout << "Printing matrix..." <<endl;
+         for (int i = 0; i < n_rows; ++i)
+         {
+            for (int j= 0; j < n_cols; ++j){
+               seal::BigPoly plain_result = decryptor.decrypt(values[i][j]);
+               double result = encoder.decode(plain_result);
+               cout << result;
+               cout << "\t";
+            }
+            cout << endl;
+         }
+      }
       Matrix (std::vector< std::vector<seal::BigPolyArray> > data);
       std::vector< std::vector<seal::BigPolyArray> > values;
       int n_rows;
@@ -213,7 +338,7 @@ class Matrix {
     
         
    private:
-        std::vector< std::vector<seal::BigPolyArray> > initialize_empty(int rows, int cols, seal::FractionalEncoder & encoder, seal::Decryptor & decryptor, seal::Encryptor & encryptor){
+        std::vector< std::vector<seal::BigPolyArray> > initialize_zero(int rows, int cols, seal::FractionalEncoder & encoder, seal::Decryptor & decryptor, seal::Encryptor & encryptor){
             double ZERO = 0;
             std::vector< std::vector<seal::BigPolyArray> > result;
             for (int i=0; i < rows; ++i){
@@ -221,6 +346,19 @@ class Matrix {
                 for (int j=0; j < cols; ++j){
                     BigPoly encoded_number = encoder.encode(ZERO);
                     row_result.emplace_back(encryptor.encrypt(encoded_number));
+                }
+                result.emplace_back(row_result);
+            }
+            return result;
+      }
+      std::vector< std::vector< std::vector<seal::BigPolyArray> > > initialize_empty(int rows, int cols, seal::FractionalEncoder & encoder, seal::Decryptor & decryptor, seal::Encryptor & encryptor){
+            double ZERO = 0;
+            std::vector< std::vector< std::vector<seal::BigPolyArray> > > result;
+            for (int i=0; i < rows; ++i){
+                std::vector< vector<seal::BigPolyArray> > row_result;
+                for (int j=0; j < cols; ++j){
+                    std::vector<seal::BigPolyArray> col_result = {};
+                    row_result.emplace_back(col_result);
                 }
                 result.emplace_back(row_result);
             }
@@ -268,8 +406,6 @@ Matrix read_data_file(string & file_name, seal::FractionalEncoder & encoder, sea
                 end = line.length();
             }
             vector<BigPolyArray> row_data;
-            //int last_tab = line.find("\t", first_tab+2);
-
             if (dimension == 1){
                 double i_0= atof(line.c_str()); 
                 BigPoly encoded_i_0 = encoder.encode(i_0);
@@ -277,73 +413,134 @@ Matrix read_data_file(string & file_name, seal::FractionalEncoder & encoder, sea
                 matrix_data.emplace_back(row_data);
             }
             else{
-                //cout << line << endl;
                 while (start != line.length()){
                     if (next_tab == -1){
                         next_tab = line.length();
                     }
-                    //cout << start << endl;
-                    //cout << next_tab << endl;
                     string i_str = line.substr(start, next_tab);
                     double i = atof(i_str.c_str());
                     BigPoly encoded_i = encoder.encode(i);
                     BigPolyArray final_i = encryptor.encrypt(encoded_i);
-                    //cout << "size: " << final_i.size() << endl;
                     row_data.emplace_back(final_i);
                     start = next_tab;
                     next_tab = line.find("\t", start+1);
                 }
                 matrix_data.emplace_back(row_data);
             }
-            /*
-                string i_0_str = line.substr(0,first_tab);
-                double i_0= atof(i_0_str.c_str());
-                string i_1_str = line.substr(first_tab,end);
-                double i_1 = atof(i_1_str.c_str());
-                BigPoly encoded_i_0 = encoder.encode(i_0);
-                row_data.emplace_back(encryptor.encrypt(encoded_i_0));
-                BigPoly encoded_i_1 = encoder.encode(i_1);
-                row_data.emplace_back(encryptor.encrypt(encoded_i_1));
-                matrix_data.emplace_back(row_data);
-            }
-            */
-            //c = atoi(b.c_str());
-            //cout << line << '\n';
         }
         myfile.close();
     }
     else cout << "Unable to open file" << file_name << endl;
     Matrix mat = Matrix(matrix_data);
-    mat.print_decrypted(encoder, decryptor, encryptor, evaluator);
+    //mat.print_decrypted(encoder, decryptor, encryptor, evaluator);
     return mat; 
 }
 
+void do_lr(Matrix & X, Matrix & y, seal::FractionalEncoder & encoder, seal::Decryptor & decryptor, seal::Encryptor & encryptor, seal::Evaluator & evaluator, EncryptionParameters & parms){
+  auto t1 = std::chrono::high_resolution_clock::now();
+
+  cout << "Computing (X^T * X)^(-1) * X^(T)y..." << endl;
+
+  //Model= (X^T * X)^(-1) * X^(T)y
+
+  //Part 1 X^(T)y
+
+  cout << "Computing X^(T)y" <<endl;
+  Matrix X_T = X.get_transpose();
+  Matrix X_T_y = X_T.multiply(y, encoder, decryptor, encryptor, evaluator);
+  X_T_y.print_decrypted(encoder, decryptor, encryptor, evaluator);
+  cout << "Done..." << endl <<endl <<endl;
+
+  cout << "Computing (X^T * X)^(-1)" <<endl;
+  cout << "(X^T * X)^(-1) = (1/(det(X^T*X)) * Adj(X^T *X)" << endl;
+  //Fomula X^T * X)^(-1) = (1/(det(X^T*X)) * Adj(X^T *X)
+
+  cout << "Computing X^T*X" <<endl;
+  Matrix X_T_X = X_T.multiply(X, encoder, decryptor, encryptor, evaluator);
+  X_T_X.print_decrypted(encoder, decryptor, encryptor, evaluator);
+
+  cout << "Computing Adj(X^T *X)" <<endl;
+  Matrix adj_xtx = X_T_X.get_adjugate(encoder, decryptor, encryptor, evaluator);
+  adj_xtx.print_decrypted(encoder, decryptor, encryptor, evaluator);
+
+  cout << "Computing det(X^T*x)"<<endl;
+  BigPolyArray det = X_T_X.get_determinant(encoder, decryptor, encryptor, evaluator);
+
+  cout << "Done..." <<endl <<endl <<endl;
+
+  cout << "Last step computing Adj(X^T *X) * X^(T)y" << endl;
+
+  Matrix final = adj_xtx.multiply(X_T_y, encoder, decryptor, encryptor, evaluator);
+
+  cout << "Done with linear Regression!" << endl <<endl <<endl;
+
+  auto t2 = std::chrono::high_resolution_clock::now();
+  std::cout << "LR took "
+            << std::chrono::duration_cast<std::chrono::milliseconds>(t2-t1).count()
+            << " milliseconds\n";
+
+  cout << "Matrix: " << endl;
+  final.print_decrypted(encoder, decryptor, encryptor, evaluator);
+  cout << endl <<endl;
+
+  cout << "1/determinant multiple: " << endl;
+  BigPoly plain_det = decryptor.decrypt(det);
+  double decoded_det = encoder.decode(plain_det);
+  cout << decoded_det << endl;
+
+
+  int max_noise_bit_count = parms.inherent_noise_bits_max();
+  cout << "Noise in encryption of determinant " << decoded_det << ": " << decryptor.inherent_noise_bits(det)
+      << "/" << max_noise_bit_count << " bits" << endl;
+
+  double avg_noise_bits = final.get_average_noise(encoder, decryptor, encryptor, evaluator);
+  cout << "Avg Noise in encryption of matrix : " << avg_noise_bits
+      << "/" << max_noise_bit_count << " bits" << endl;
+  double max_matrix_noise_bits = final.get_max_noise(encoder, decryptor, encryptor, evaluator);
+  cout << "Max Noise in encryption of matrix : " << max_matrix_noise_bits
+      << "/" << max_noise_bit_count << " bits" << endl;
+
+}
+
+
 void example_lr()
 {
-    print_example_banner("Linear Regression");
+    print_example_banner("Linear Regression DEGREE 3");
 
     // Create encryption parameters
     EncryptionParameters parms;
 
-    parms.poly_modulus() = "1x^4096 + 1";
+    parms.poly_modulus() = "1x^8192 + 1";
+    //parms.poly_modulus() = "1x^16384 + 1";
     //increased from 1024
     //was 2048 through mul
-    parms.coeff_modulus() = ChooserEvaluator::default_parameter_options().at(4096);
+    parms.coeff_modulus() = ChooserEvaluator::default_parameter_options().at(8192);    
+    //parms.coeff_modulus() = ChooserEvaluator::default_parameter_options().at(16384);
     //decreased from 8
     // was 5 for just though mul
-    parms.plain_modulus() = 1 << 5;
+
+    //15 good for 15 points
+    //17 good for 25 points
+    //20 good for 50 points
+    //23 good for 100 points (dimension 3)
+    //23 good for 500 points (dimension 2)
+
+    //30 for degree 5
+    parms.plain_modulus() = 1 << 30;
 
 
-    parms.decomposition_bit_count() = 20;
+    parms.decomposition_bit_count() = 24;
+    //parms.decomposition_bit_count() = 44;
 
     // Generate keys.
     cout << "Generating keys ..." << endl;
     KeyGenerator generator(parms);
-    generator.generate(10);
+    generator.generate(20);
     cout << "... key generation complete" << endl <<endl;
     BigPolyArray public_key = generator.public_key();
     BigPoly secret_key = generator.secret_key();
     EvaluationKeys evaluation_keys = generator.evaluation_keys();
+
     /*
     We will need a fractional encoder for dealing with the rational numbers. Here we reserve 
     64 coefficients of the polynomial for the integral part (low-degree terms) and expand the 
@@ -356,60 +553,92 @@ void example_lr()
     Evaluator evaluator(parms, evaluation_keys);
     Decryptor decryptor(parms, secret_key);
 
-    string file_name_data  = "../data.txt";
-    string file_name_labels = "../labels.txt";
-    Matrix X = read_data_file(file_name_data, encoder, decryptor, encryptor, evaluator, false);
-    Matrix y = read_data_file(file_name_labels, encoder, decryptor, encryptor, evaluator, true);
+
+    //labels3.txt: y = .4 * (x_1) + .9 * (x_2) + 1.3 * (x_3) + delta
+    //labels.txt: y = .25 * (x_1) + .8 * (x_2) + 3 + delta
+    /*
+    string file_name_data_5  = "../data_5_3.txt";
+    string file_name_labels_5 = "../labels_5_3.txt";
+    Matrix X_5 = read_data_file(file_name_data_5, encoder, decryptor, encryptor, evaluator, false);
+    Matrix y_5 = read_data_file(file_name_labels_5, encoder, decryptor, encryptor, evaluator, true);
+
+    cout << "5 data points" << endl;
     cout << "Encrypted data matrix and label vector have been created." << endl;
     cout << "Preparing to do linear regression..." << endl <<endl <<endl;
-    cout << "Computing (X^T * X)^(-1) * X^(T)y..." << endl;
+    do_lr(X_5, y_5, encoder, decryptor, encryptor, evaluator, parms);
 
-    //Matrix m = X.get_adjugate(encoder, decryptor, encryptor, evaluator);
-    //m.print_decrypted(encoder, decryptor, encryptor, evaluator);
-    /*
-    cout << "determinant:" << endl;
-    BigPoly plain_det = decryptor.decrypt(det);
-    double decoded_det = encoder.decode(plain_det);
-    cout << decoded_det << endl;
+    string file_name_data_10  = "../data_10_3.txt";
+    string file_name_labels_10 = "../labels_10_3.txt";
+    Matrix X_10 = read_data_file(file_name_data_10, encoder, decryptor, encryptor, evaluator, false);
+    Matrix y_10 = read_data_file(file_name_labels_10, encoder, decryptor, encryptor, evaluator, true);
+    
+    cout << "10 data points " << endl;
+    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "Preparing to do linear regression..." << endl <<endl <<endl;
+    do_lr(X_10, y_10, encoder, decryptor, encryptor, evaluator, parms);
+
+    string file_name_data_25  = "../data_25_3.txt";
+    string file_name_labels_25 = "../labels_25_3.txt";
+    Matrix X_25 = read_data_file(file_name_data_25, encoder, decryptor, encryptor, evaluator, false);
+    Matrix y_25 = read_data_file(file_name_labels_25, encoder, decryptor, encryptor, evaluator, true);
+    
+    cout << "25 data points " << endl;
+    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "Preparing to do linear regression..." << endl <<endl <<endl;
+    do_lr(X_25, y_25, encoder, decryptor, encryptor, evaluator, parms);
+
+    string file_name_data_50  = "../data_50_3.txt";
+    string file_name_labels_50 = "../labels_50_3.txt";
+    Matrix X_50 = read_data_file(file_name_data_50, encoder, decryptor, encryptor, evaluator, false);
+    Matrix y_50 = read_data_file(file_name_labels_50, encoder, decryptor, encryptor, evaluator, true);
+    
+    cout << "50 data points with degree 2" << endl;
+    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "Preparing to do linear regression..." << endl <<endl <<endl;
+    do_lr(X_50, y_50, encoder, decryptor, encryptor, evaluator, parms);
+
+    string file_name_data_100  = "../data_100_3.txt";
+    string file_name_labels_100 = "../labels_100_3.txt";
+    Matrix X_100 = read_data_file(file_name_data_100, encoder, decryptor, encryptor, evaluator, false);
+    Matrix y_100 = read_data_file(file_name_labels_100, encoder, decryptor, encryptor, evaluator, true);
+    
+    cout << "100 data points" << endl;
+    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "Preparing to do linear regression..." << endl <<endl <<endl;
+    do_lr(X_100, y_100, encoder, decryptor, encryptor, evaluator, parms);
     */
 
-    //Model= (X^T * X)^(-1) * X^(T)y
+    string file_name_data_200  = "../data_200_3.txt";
+    string file_name_labels_200 = "../labels_200_3.txt";
+    Matrix X_200 = read_data_file(file_name_data_200, encoder, decryptor, encryptor, evaluator, false);
+    Matrix y_200 = read_data_file(file_name_labels_200, encoder, decryptor, encryptor, evaluator, true);
+    
+    cout << "200 data points " << endl;
+    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "Preparing to do linear regression..." << endl <<endl <<endl;
+    do_lr(X_200, y_200, encoder, decryptor, encryptor, evaluator, parms);
 
-    //Part 1 X^(T)y
-    cout << "Computing X^(T)y" <<endl;
-    Matrix X_T = X.get_transpose();
-    Matrix X_T_y = X_T.multiply(y, encoder, decryptor, encryptor, evaluator);
-    cout << "Done..." << endl <<endl <<endl;
 
-    cout << "Computing (X^T * X)^(-1)" <<endl;
-    cout << "(X^T * X)^(-1) = (1/(det(X^T*X)) * Adj(X^T *X)" << endl;
-    //Fomula X^T * X)^(-1) = (1/(det(X^T*X)) * Adj(X^T *X)
+    string file_name_data_500  = "../data_500_3.txt";
+    string file_name_labels_500 = "../labels_500_3.txt";
+    Matrix X_500 = read_data_file(file_name_data_500, encoder, decryptor, encryptor, evaluator, false);
+    Matrix y_500 = read_data_file(file_name_labels_500, encoder, decryptor, encryptor, evaluator, true);
+    
+    cout << "500 data points" << endl;
+    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "Preparing to do linear regression..." << endl <<endl <<endl;
+    do_lr(X_500, y_500, encoder, decryptor, encryptor, evaluator, parms);
 
-    cout << "Computing X^T*X" <<endl;
-    Matrix X_T_X = X_T.multiply(X, encoder, decryptor, encryptor, evaluator);
-
-    cout << "Computing Adj(X^T *X)" <<endl;
-    Matrix adj_xtx = X_T_X.get_adjugate(encoder, decryptor, encryptor, evaluator);
-
-    cout << "Computing det(X^T*x)"<<endl;
-    BigPolyArray det = X_T_X.get_determinant(encoder, decryptor, encryptor, evaluator);
-
-    cout << "Done..." <<endl <<endl <<endl;
-
-    cout << "Last step computing Adj(X^T *X) * X^(T)y" << endl;
-
-    Matrix final = adj_xtx.multiply(X_T_y, encoder, decryptor, encryptor, evaluator);
-
-    cout << "Done with linear Regression!" << endl <<endl <<endl;
-
-    cout << "Matrix: " << endl;
-    final.print_decrypted(encoder, decryptor, encryptor, evaluator);
-    cout << endl <<endl;
-
-    cout << "1/determinant multiple: " << endl;
-    BigPoly plain_det = decryptor.decrypt(det);
-    double decoded_det = encoder.decode(plain_det);
-    cout << decoded_det << endl;
+    string file_name_data_1000  = "../data_1000_3.txt";
+    string file_name_labels_1000 = "../labels_1000_3.txt";
+    Matrix X_1000 = read_data_file(file_name_data_1000, encoder, decryptor, encryptor, evaluator, false);
+    Matrix y_1000 = read_data_file(file_name_labels_1000, encoder, decryptor, encryptor, evaluator, true);
+    
+    cout << "1000 data points" << endl;
+    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "Preparing to do linear regression..." << endl <<endl <<endl;
+    do_lr(X_1000, y_1000, encoder, decryptor, encryptor, evaluator, parms);
+    
 }
 
 
@@ -830,7 +1059,7 @@ void example_batching()
     */
     parms.poly_modulus() = "1x^4096 + 1";
     parms.coeff_modulus() = ChooserEvaluator::default_parameter_options().at(4096);
-    parms.plain_modulus() = 40961;
+    parms.plain_modulus() = 4096;
 
     // Create the PolyCRTBuilder
     PolyCRTBuilder crtbuilder(parms);

@@ -6,6 +6,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <cmath> 
 
 using namespace std;
 
@@ -80,6 +81,11 @@ class Matrix {
 
       Matrix get_adjugate(){
         cout << "Calculating the adjugate of a matrix..." <<endl;
+        if (n_cols == 1 && n_rows == 1){
+           std::vector<double> row = {1};
+           std::vector< std::vector<double> > result = {row};
+           return Matrix(result);
+        }
         if (n_cols == 2 && n_rows == 2){
             std::vector< std::vector<double> > result = initialize_empty(2, 2);
             //for 2x2 matrix [[a,b],[c,d]] adjugate is [[d, -b],[-c, a]]
@@ -128,11 +134,44 @@ class Matrix {
             return Matrix(result);
         }
         else{
-            cout <<"Cannot determine adjugate matrix, outputting copy of input matrix..." <<endl;
-            return Matrix(values);
+            return get_adjugate_recursive();
         }
 
       }
+      Matrix get_adjugate_recursive(){
+        cout << "Calculating the adjugate of a matrix..." <<endl;
+        std::vector< std::vector<double> > result;
+        for(int i=0; i < n_rows; ++i){
+          std::vector<double> row_result;
+          for(int j=0; j < n_cols; ++j){
+            Matrix m = wo_row_col(i, j);
+            int sign = std::pow(-1,i+j);
+            double det = m.get_determinant();
+            double value = det *sign;
+            row_result.emplace_back(value);
+          }
+          result.emplace_back(row_result);
+        }
+        Matrix adj_T = Matrix(result);
+        return adj_T.get_transpose();
+      }
+
+      Matrix wo_row_col(int row, int col){
+        std::vector< std::vector<double> > result;
+        for(int i=0; i < n_rows; ++i){
+          if(i != row){
+            std::vector<double> row_result;
+            for(int j=0; j < n_cols; ++j){
+              if(j != col){
+                row_result.emplace_back(values[i][j]);
+              }
+            }
+            result.emplace_back(row_result);
+          }
+        }
+        return Matrix(result);
+      }
+
 
       void print_decrypted(){
          cout << "Printing matrix..." <<endl;
@@ -147,6 +186,9 @@ class Matrix {
       }
  
     double get_determinant(){
+        if (n_cols == 1 && n_rows == 1){
+            return values[0][0];
+        }
         if (n_cols == 2 && n_rows == 2){
             cout << "calculating determinat of a 2x2 matrix" <<endl;
             double ac = values[0][0] * values[1][1];
@@ -181,10 +223,43 @@ class Matrix {
             return det;
         }
         else{
-            cout <<"Cannot determine adjugate matrix, outputting copy of input matrix..." <<endl;
-            return 0.0;
+          return get_determinant_recursive();
         }
     }
+    double get_determinant_recursive(){
+        if(n_cols != n_rows){
+          cout << "NOT A SQUARE MATRIX NO DETERMINANT";
+          cout << n_cols << "\t" << n_rows << endl;
+        }
+        std::vector< std::vector<double> > products;
+        int i=1;
+        for(int j=0; j < n_cols; ++j){
+          cout << "inside loop" << endl;
+          Matrix m = wo_row_col(i, j);
+          cout << "created matrix without row/col" << endl;
+          double sign = std::pow(-1,i+j);
+          cout << "right before recursive call" << endl;
+          double det = m.get_determinant();
+          cout << "finished recursive call" << endl;
+          std::vector<double> to_mul = {values[i][j], det, sign};
+          cout << "finished vector" << endl;
+          products.emplace_back(to_mul);
+          cout << "end of for loop" << endl;
+        }
+        std::vector<double> to_sum;
+        for(int i=0; i<n_rows; ++i){
+          double product = products[i][0]*products[i][1]*products[i][2];
+          cout << "after mult many" << endl;
+          to_sum.emplace_back(product);
+        }
+        double result = 0;
+        for (int j=0; j < to_sum.size(); ++j){
+          result += to_sum[j];
+        }
+        return result;
+        //Matrix adj_T = Matrix(result);
+        //return adj_T.get_transpose();
+      }
 
       Matrix (std::vector< std::vector<double> > data);
       std::vector< std::vector<double> > values;
@@ -239,7 +314,7 @@ Matrix read_data_file(string & file_name, bool is_vector){
     if (myfile.is_open())
     {
         while ( getline (myfile,line) ){
-            cout <<"reading" <<endl;
+            //cout <<"reading" <<endl;
             int start = 0; 
             int first_tab = line.find("\t");
             int next_tab = first_tab;
@@ -278,23 +353,15 @@ Matrix read_data_file(string & file_name, bool is_vector){
     }
     else cout << "Unable to open file" << file_name << endl;
     Matrix mat = Matrix(matrix_data);
-    mat.print_decrypted();
+    //mat.print_decrypted();
     return mat; 
 }
 
-void example_lr()
-{
-    print_example_banner("Linear Regression");
-
-    string file_name_data  = "../sealcrypto/data.txt";
-    string file_name_labels = "../sealcrypto/labels.txt";
-    Matrix X = read_data_file(file_name_data, false);
-    Matrix y = read_data_file(file_name_labels, true);
-    cout << "Encrypted data matrix and label vector have been created." << endl;
+void do_lr(Matrix X, Matrix y){
     cout << "Preparing to do linear regression..." << endl <<endl <<endl;
+    auto t1 = std::chrono::high_resolution_clock::now();
     cout << "Computing (X^T * X)^(-1) * X^(T)y..." << endl;
     //Model= (X^T * X)^(-1) * X^(T)y
-
 
     //Part 1 X^(T)y
     cout << "Computing X^(T)y" <<endl;
@@ -307,7 +374,9 @@ void example_lr()
     
     Matrix X_T = X.get_transpose();
     Matrix X_T_y = X_T.multiply(y);
+    X_T_y.print_decrypted();
     cout << "Done..." << endl <<endl <<endl;
+
 
     cout << "Computing (X^T * X)^(-1)" <<endl;
     cout << "(X^T * X)^(-1) = (1/(det(X^T*X)) * Adj(X^T *X)" << endl;
@@ -315,9 +384,11 @@ void example_lr()
 
     cout << "Computing X^T*X" <<endl;
     Matrix X_T_X = X_T.multiply(X);
+    X_T_X.print_decrypted();
 
     cout << "Computing Adj(X^T *X)" <<endl;
     Matrix adj_xtx = X_T_X.get_adjugate();
+    adj_xtx.print_decrypted();
 
     cout << "Computing det(X^T*x)"<<endl;
     double det = X_T_X.get_determinant();
@@ -327,6 +398,10 @@ void example_lr()
     cout << "Last step computing Adj(X^T *X) * X^(T)y" << endl;
 
     Matrix final = adj_xtx.multiply(X_T_y);
+    auto t2 = std::chrono::high_resolution_clock::now();
+    std::cout << "LR took "
+            << std::chrono::duration_cast<std::chrono::milliseconds>(t2-t1).count()
+            << " milliseconds\n";
 
     cout << "Done with linear Regression!" << endl <<endl <<endl;
 
@@ -336,6 +411,94 @@ void example_lr()
 
     cout << "1/determinant multiple: " << endl;
     cout << det << endl;
+    
+}
+
+void example_lr()
+{
+    print_example_banner("Linear Regression DEGREE 3");
+    /*
+    string file_name_data_5  = "../sealcrypto/data_5_3.txt";
+    string file_name_labels_5 = "../sealcrypto/labels_5_3.txt";
+    Matrix X_5 = read_data_file(file_name_data_5, false);
+    Matrix y_5 = read_data_file(file_name_labels_5, true);
+
+    cout << "5 data points" << endl;
+    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "Preparing to do linear regression..." << endl <<endl <<endl;
+    do_lr(X_5, y_5);
+
+    string file_name_data_10  = "../sealcrypto/data_10_3.txt";
+    string file_name_labels_10 = "../sealcrypto/labels_10_3.txt";
+    Matrix X_10 = read_data_file(file_name_data_10, false);
+    Matrix y_10 = read_data_file(file_name_labels_10, true);
+    
+    cout << "10 data points" << endl;
+    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "Preparing to do linear regression..." << endl <<endl <<endl;
+    do_lr(X_10, y_10);
+
+    string file_name_data_25  = "../sealcrypto/data_25_3.txt";
+    string file_name_labels_25 = "../sealcrypto/labels_25_3.txt";
+    Matrix X_25 = read_data_file(file_name_data_25, false);
+    Matrix y_25 = read_data_file(file_name_labels_25, true);
+    
+    cout << "25 data points" << endl;
+    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "Preparing to do linear regression..." << endl <<endl <<endl;
+    do_lr(X_25, y_25);
+
+    string file_name_data_50  = "../sealcrypto/data_50_3.txt";
+    string file_name_labels_50 = "../sealcrypto/labels_50_3.txt";
+    Matrix X_50 = read_data_file(file_name_data_50, false);
+    Matrix y_50 = read_data_file(file_name_labels_50, true);
+    
+    cout << "50 data points" << endl;
+    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "Preparing to do linear regression..." << endl <<endl <<endl;
+    do_lr(X_50, y_50);
+
+    string file_name_data_100  = "../sealcrypto/data_100_3.txt";
+    string file_name_labels_100 = "../sealcrypto/labels_100_3.txt";
+    Matrix X_100 = read_data_file(file_name_data_100, false);
+    Matrix y_100 = read_data_file(file_name_labels_100, true);
+    
+    cout << "100 data points" << endl;
+    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "Preparing to do linear regression..." << endl <<endl <<endl;
+    do_lr(X_100, y_100);
+    */
+    string file_name_data_200  = "../sealcrypto/data_200_3.txt";
+    string file_name_labels_200 = "../sealcrypto/labels_200_3.txt";
+    Matrix X_200 = read_data_file(file_name_data_200, false);
+    Matrix y_200 = read_data_file(file_name_labels_200, true);
+    
+    
+    cout << "200 data points" << endl;
+    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "Preparing to do linear regression..." << endl <<endl <<endl;
+    do_lr(X_200, y_200);
+
+
+    string file_name_data_500  = "../sealcrypto/data_500_3.txt";
+    string file_name_labels_500 = "../sealcrypto/labels_500_3.txt";
+    Matrix X_500 = read_data_file(file_name_data_500, false);
+    Matrix y_500 = read_data_file(file_name_labels_500, true);
+    
+    cout << "500 data points" << endl;
+    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "Preparing to do linear regression..." << endl <<endl <<endl;
+    do_lr(X_500, y_500);
+
+    string file_name_data_1000  = "../sealcrypto/data_1000_3.txt";
+    string file_name_labels_1000 = "../sealcrypto/labels_1000_3.txt";
+    Matrix X_1000 = read_data_file(file_name_data_1000, false);
+    Matrix y_1000 = read_data_file(file_name_labels_1000, true);
+    
+    cout << "1000 data points" << endl;
+    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "Preparing to do linear regression..." << endl <<endl <<endl;
+    do_lr(X_1000, y_1000);
     
 }
 
