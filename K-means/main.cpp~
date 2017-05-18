@@ -1024,7 +1024,7 @@ void kmean() {
     // Use the default values of 16384
     parms.coeff_modulus() = ChooserEvaluator::default_parameter_options().at(16384);
     // Add the plain modulus
-    parms.plain_modulus() = 1 << 8;
+    parms.plain_modulus() = 1 << 20;
     // Maximum noise level should polynomial modulus/plain_modulus
     // We encode each number as a polynomial
     // IntegerEncoder encoder(parms.plain_modulus());
