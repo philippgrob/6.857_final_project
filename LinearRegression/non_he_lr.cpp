@@ -11,7 +11,10 @@
 using namespace std;
 
 void print_example_banner(string title);
-void example_lr();
+void linear_regression();
+
+
+//to run:  g++ non_seal_lr.cpp -std=c++11 -stdlib=libc++
 
 class Matrix {
    public:
@@ -234,22 +237,15 @@ class Matrix {
         std::vector< std::vector<double> > products;
         int i=1;
         for(int j=0; j < n_cols; ++j){
-          cout << "inside loop" << endl;
           Matrix m = wo_row_col(i, j);
-          cout << "created matrix without row/col" << endl;
           double sign = std::pow(-1,i+j);
-          cout << "right before recursive call" << endl;
           double det = m.get_determinant();
-          cout << "finished recursive call" << endl;
           std::vector<double> to_mul = {values[i][j], det, sign};
-          cout << "finished vector" << endl;
           products.emplace_back(to_mul);
-          cout << "end of for loop" << endl;
         }
         std::vector<double> to_sum;
         for(int i=0; i<n_rows; ++i){
           double product = products[i][0]*products[i][1]*products[i][2];
-          cout << "after mult many" << endl;
           to_sum.emplace_back(product);
         }
         double result = 0;
@@ -257,8 +253,6 @@ class Matrix {
           result += to_sum[j];
         }
         return result;
-        //Matrix adj_T = Matrix(result);
-        //return adj_T.get_transpose();
       }
 
       Matrix (std::vector< std::vector<double> > data);
@@ -294,9 +288,8 @@ Matrix::Matrix (std::vector< std::vector<double> > data) {
 
 int main()
 {
-    // Example: Basics
 
-    example_lr();
+    linear_regression();
 
     // Wait for ENTER before closing screen.
     cout << "Press ENTER to exit" << endl;
@@ -314,7 +307,6 @@ Matrix read_data_file(string & file_name, bool is_vector){
     if (myfile.is_open())
     {
         while ( getline (myfile,line) ){
-            //cout <<"reading" <<endl;
             int start = 0; 
             int first_tab = line.find("\t");
             int next_tab = first_tab;
@@ -323,7 +315,6 @@ Matrix read_data_file(string & file_name, bool is_vector){
                 end = line.length();
             }
             vector<double> row_data;
-            //int last_tab = line.find("\t", first_tab+2);
 
             if (is_vector){
                 double i_0= atof(line.c_str()); 
@@ -335,25 +326,19 @@ Matrix read_data_file(string & file_name, bool is_vector){
                     if (next_tab == -1){
                         next_tab = line.length();
                     }
-                    //cout << start << endl;
-                    //cout << next_tab << endl;
                     string i_str = line.substr(start, next_tab);
                     double i = atof(i_str.c_str());
-                    //cout << "size: " << final_i.size() << endl;
                     row_data.emplace_back(i);
                     start = next_tab;
                     next_tab = line.find("\t", start+1);
                 }
                 matrix_data.emplace_back(row_data);
             }
-            //c = atoi(b.c_str());
-            //cout << line << '\n';
         }
         myfile.close();
     }
     else cout << "Unable to open file" << file_name << endl;
     Matrix mat = Matrix(matrix_data);
-    //mat.print_decrypted();
     return mat; 
 }
 
@@ -365,12 +350,6 @@ void do_lr(Matrix X, Matrix y){
 
     //Part 1 X^(T)y
     cout << "Computing X^(T)y" <<endl;
-    /*
-    double det = X.get_determinant();
-    cout << "determinant: " << det <<endl;
-    Matrix m = X.get_adjugate();
-    m.print_decrypted();
-    */
     
     Matrix X_T = X.get_transpose();
     Matrix X_T_y = X_T.multiply(y);
@@ -414,17 +393,17 @@ void do_lr(Matrix X, Matrix y){
     
 }
 
-void example_lr()
+void linear_regression()
 {
     print_example_banner("Linear Regression DEGREE 3");
-    /*
+    
     string file_name_data_5  = "../sealcrypto/data_5_3.txt";
     string file_name_labels_5 = "../sealcrypto/labels_5_3.txt";
     Matrix X_5 = read_data_file(file_name_data_5, false);
     Matrix y_5 = read_data_file(file_name_labels_5, true);
 
     cout << "5 data points" << endl;
-    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "data matrix and label vector have been created." << endl;
     cout << "Preparing to do linear regression..." << endl <<endl <<endl;
     do_lr(X_5, y_5);
 
@@ -434,7 +413,7 @@ void example_lr()
     Matrix y_10 = read_data_file(file_name_labels_10, true);
     
     cout << "10 data points" << endl;
-    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "data matrix and label vector have been created." << endl;
     cout << "Preparing to do linear regression..." << endl <<endl <<endl;
     do_lr(X_10, y_10);
 
@@ -444,7 +423,7 @@ void example_lr()
     Matrix y_25 = read_data_file(file_name_labels_25, true);
     
     cout << "25 data points" << endl;
-    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "data matrix and label vector have been created." << endl;
     cout << "Preparing to do linear regression..." << endl <<endl <<endl;
     do_lr(X_25, y_25);
 
@@ -454,7 +433,7 @@ void example_lr()
     Matrix y_50 = read_data_file(file_name_labels_50, true);
     
     cout << "50 data points" << endl;
-    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "data matrix and label vector have been created." << endl;
     cout << "Preparing to do linear regression..." << endl <<endl <<endl;
     do_lr(X_50, y_50);
 
@@ -464,10 +443,9 @@ void example_lr()
     Matrix y_100 = read_data_file(file_name_labels_100, true);
     
     cout << "100 data points" << endl;
-    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "data matrix and label vector have been created." << endl;
     cout << "Preparing to do linear regression..." << endl <<endl <<endl;
     do_lr(X_100, y_100);
-    */
     string file_name_data_200  = "../sealcrypto/data_200_3.txt";
     string file_name_labels_200 = "../sealcrypto/labels_200_3.txt";
     Matrix X_200 = read_data_file(file_name_data_200, false);
@@ -475,10 +453,9 @@ void example_lr()
     
     
     cout << "200 data points" << endl;
-    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "data matrix and label vector have been created." << endl;
     cout << "Preparing to do linear regression..." << endl <<endl <<endl;
     do_lr(X_200, y_200);
-
 
     string file_name_data_500  = "../sealcrypto/data_500_3.txt";
     string file_name_labels_500 = "../sealcrypto/labels_500_3.txt";
@@ -486,7 +463,7 @@ void example_lr()
     Matrix y_500 = read_data_file(file_name_labels_500, true);
     
     cout << "500 data points" << endl;
-    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "data matrix and label vector have been created." << endl;
     cout << "Preparing to do linear regression..." << endl <<endl <<endl;
     do_lr(X_500, y_500);
 
@@ -496,10 +473,10 @@ void example_lr()
     Matrix y_1000 = read_data_file(file_name_labels_1000, true);
     
     cout << "1000 data points" << endl;
-    cout << "Encrypted data matrix and label vector have been created." << endl;
+    cout << "data matrix and label vector have been created." << endl;
     cout << "Preparing to do linear regression..." << endl <<endl <<endl;
     do_lr(X_1000, y_1000);
-    
+
 }
 
 void print_example_banner(string title)
